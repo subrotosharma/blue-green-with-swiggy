@@ -19,14 +19,8 @@ phases:
 
   pre_build:
     commands:
-      - echo "Running pre-build phase..."
-      - echo "Preparing security scanning tools (optional)..."
-      # Optional Trivy / Dependency Check / SonarScanner setup
-      # Uncomment if needed
-      # - wget https://github.com/aquasecurity/trivy/releases/download/v0.19.2/trivy_0.19.2_Linux-64bit.tar.gz
-      # - tar zxvf trivy_0.19.2_Linux-64bit.tar.gz
-      # - export PATH=$PATH:$PWD
-      # - trivy filesystem --exit-code 0 --no-progress . >> trivyfilescan.txt
+      - echo "Running pre-build steps..."
+      - echo "Docker registry: $DOCKER_REGISTRY_URL"
 
   build:
     commands:
@@ -37,14 +31,4 @@ phases:
 
   post_build:
     commands:
-      - echo "Running post-build phase..."
-      - |
-        aws ses send-email \
-          --from "devopssubroto@gmail.com" \
-          --destination "ToAddresses=devopssubroto@gmail.com" \
-          --message "Subject={Data=CodeBuild Status: $CODEBUILD_BUILD_ID,Charset=utf8},Body={Text={Data=Build status: $CODEBUILD_BUILD_STATUS,Charset=utf8}}" \
-          --region "us-east-1"
-
-artifacts:
-  files:
-    - appspec.yaml
+      - echo "Build completed at `date`"
