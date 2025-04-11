@@ -14,6 +14,7 @@ phases:
       java: corretto17
     commands:
       - pip install --upgrade awscli
+      - yum install -y jq
 
   pre_build:
     commands:
@@ -42,7 +43,7 @@ phases:
   post_build:
     commands:
       - echo "Performing Trivy image scan..."
-      - trivy image "$DOCKER_REGISTRY_USERNAME/swiggy:latest" >> trivyimage.txt
+      - trivy image "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest" >> trivyimage.txt
       - echo "Running OWASP Dependency-Check..."
       - cd dependency-check/bin
       - ./dependency-check.sh --scan . --format ALL
@@ -54,27 +55,36 @@ phases:
           -Dsonar.sources=. \
           -Dsonar.host.url=http://54.234.202.240:9000 \
           -Dsonar.login=$SONAR_TOKEN
-      - echo "Deploying to ECS..."
-      - IMAGE_URI="$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest"
       - |
+        echo "Deploying to ECS..."
+        IMAGE_URI="$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest"
         TASK_DEF=$(aws ecs describe-task-definition --task-definition swiggy-task)
-        NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE_URI" '.taskDefinition | {family, containerDefinitions, executionRoleArn, taskRoleArn, networkMode, requiresCompatibilities, cpu, memory} | .containerDefinitions[0].image=$IMAGE | {family, containerDefinitions, executionRoleArn, taskRoleArn, networkMode, requiresCompatibilities, cpu, memory}')
+        NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE_URI" '
+          .taskDefinition |
+          {
+            family,
+            containerDefinitions,
+            executionRoleArn,
+            taskRoleArn,
+            networkMode,
+            requiresCompatibilities,
+            cpu,
+            memory
+          } |
+          .containerDefinitions[0].image = $IMAGE
+        ')
         echo "$NEW_TASK_DEF" > new-task-def.json
-      - |
-        aws ecs register-task-definition \
-          --cli-input-json file://new-task-def.json > registered-task-def.json
-      - NEW_REVISION=$(cat registered-task-def.json | jq -r '.taskDefinition.revision')
-      - echo "New Task Revision: $NEW_REVISION"
-      - |
+        aws ecs register-task-definition --cli-input-json file://new-task-def.json > registered-task-def.json
+        NEW_REVISION=$(cat registered-task-def.json | jq -r '.taskDefinition.revision')
+        echo "New Task Revision: $NEW_REVISION"
         aws ecs update-service \
           --cluster bluegreen-cluster \
           --service swiggy-service \
           --task-definition swiggy-task:$NEW_REVISION
-      - |
         aws ecs wait services-stable \
           --cluster bluegreen-cluster \
           --services swiggy-service
-      - echo "Deployment complete."
+        echo "ECS Deployment complete."
       - |
         aws ses send-email \
           --from "devopssubroto@gmail.com" \
