@@ -61,7 +61,7 @@ phases:
           --to "devopssubroto@gmail.com" \
           --subject "CodeBuild Status: $CODEBUILD_BUILD_ID" \
           --text "Build status: $CODEBUILD_BUILD_STATUS" \
-          --region "ap-south-1" || echo "SES email failed (non-blocking)"
+          --region "us-east-1" || echo "SES email failed (non-blocking)"
 
 artifacts:
   files:
