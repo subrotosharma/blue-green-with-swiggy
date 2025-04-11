@@ -13,15 +13,16 @@ phases:
       python: 3.11
       java: corretto17
     commands:
-      - echo "Install phase started"
-      - nohup /usr/local/bin/dockerd-entrypoint.sh &  # Required to use Docker inside the build container
-      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"  # Wait for Docker daemon
+      - echo "Starting install phase..."
+      - nohup /usr/local/bin/dockerd-entrypoint.sh &  # Start Docker daemon
+      - timeout 15 sh -c "until docker info; do echo 'Waiting for Docker...'; sleep 1; done"
 
   pre_build:
     commands:
-      - echo "Installing dependencies..."
-      - echo "Performing Trivy file scan before building the image..."
-      # Uncomment the below lines if you want to enable Trivy scanning and SonarScanner setup
+      - echo "Running pre-build phase..."
+      - echo "Preparing security scanning tools (optional)..."
+      # Optional Trivy / Dependency Check / SonarScanner setup
+      # Uncomment if needed
       # - wget https://github.com/aquasecurity/trivy/releases/download/v0.19.2/trivy_0.19.2_Linux-64bit.tar.gz
       # - tar zxvf trivy_0.19.2_Linux-64bit.tar.gz
       # - export PATH=$PATH:$PWD
@@ -29,15 +30,14 @@ phases:
 
   build:
     commands:
-      - echo "Running tests..."
-      - echo "Building Docker image..."
+      - echo "Running build phase..."
       - echo "$DOCKER_REGISTRY_PASSWORD" | docker login -u "$DOCKER_REGISTRY_USERNAME" --password-stdin "$DOCKER_REGISTRY_URL"
       - docker build -t "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest" .
       - docker push "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest"
 
   post_build:
     commands:
-      - echo "Sending build status email..."
+      - echo "Running post-build phase..."
       - |
         aws ses send-email \
           --from "devopssubroto@gmail.com" \
