@@ -14,21 +14,33 @@ phases:
       java: corretto17
     commands:
       - echo "Starting install phase..."
-      - nohup /usr/local/bin/dockerd-entrypoint.sh &  # Start Docker daemon
-      - timeout 15 sh -c "until docker info; do echo 'Waiting for Docker...'; sleep 1; done"
+      - nohup /usr/local/bin/dockerd-entrypoint.sh &  # Start Docker daemon in background
+      - timeout 15 sh -c "until docker info; do echo 'Waiting for Docker to be ready...'; sleep 1; done"
 
   pre_build:
     commands:
       - echo "Running pre-build steps..."
-      - echo "Docker registry: $DOCKER_REGISTRY_URL"
+      - echo "Authenticating to Docker registry..."
+      - echo "$DOCKER_REGISTRY_PASSWORD" | docker login -u "$DOCKER_REGISTRY_USERNAME" --password-stdin "$DOCKER_REGISTRY_URL"
 
   build:
     commands:
-      - echo "Running build phase..."
-      - echo "$DOCKER_REGISTRY_PASSWORD" | docker login -u "$DOCKER_REGISTRY_USERNAME" --password-stdin "$DOCKER_REGISTRY_URL"
+      - echo "Building Docker image..."
       - docker build -t "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest" .
+      - echo "Pushing Docker image to registry..."
       - docker push "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest"
 
   post_build:
     commands:
-      - echo "Build completed at `date`"
+      - echo "Build completed successfully at $(date)"
+      - echo "Sending email notification..."
+      - |
+        aws ses send-email \
+          --from "devopssubroto@gmail.com" \
+          --destination "ToAddresses=devopssubroto@gmail.com" \
+          --message "Subject={Data=CodeBuild Status: $CODEBUILD_BUILD_ID,Charset=utf8},Body={Text={Data=Build status: $CODEBUILD_BUILD_STATUS,Charset=utf8}}" \
+          --region "us-east-1"
+
+artifacts:
+  files:
+    - appspec.yaml
