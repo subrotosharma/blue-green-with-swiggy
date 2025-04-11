@@ -6,6 +6,7 @@ env:
     DOCKER_REGISTRY_PASSWORD: /cicd/docker-credentials/password
     DOCKER_REGISTRY_URL: /cicd/docker-registry/url
     SONAR_TOKEN: /cicd/sonar/sonar-token
+    SLACK_WEBHOOK_URL: /cicd/slack/webhook-url  # Optional for Slack
 
 phases:
   install:
@@ -16,12 +17,10 @@ phases:
   pre_build:
     commands:
       - echo "Installing dependencies..."
-      - echo "Performing Trivy file scan before building the image..."
       - wget https://github.com/aquasecurity/trivy/releases/download/v0.19.2/trivy_0.19.2_Linux-64bit.tar.gz
       - tar zxvf trivy_0.19.2_Linux-64bit.tar.gz
       - export PATH=$PATH:$PWD
       - trivy filesystem --exit-code 0 --no-progress . >> trivyfilescan.txt
-      - echo "Downloading and installing OWASP Dependency-Check..."
       - wget https://github.com/jeremylong/DependencyCheck/releases/download/v7.0.2/dependency-check-7.0.2-release.zip
       - unzip dependency-check-7.0.2-release.zip
       - export SONAR_SCANNER_VERSION=4.7.0.2747
@@ -41,9 +40,9 @@ phases:
 
   post_build:
     commands:
-      - echo "Performing Trivy image scan after building the image..."
+      - echo "Performing Trivy image scan..."
       - trivy image "$DOCKER_REGISTRY_USERNAME/swiggy:latest" >> trivyimage.txt
-      - echo "Running OWASP Dependency-Check scan..."
+      - echo "Running OWASP Dependency-Check..."
       - cd dependency-check/bin
       - ./dependency-check.sh --scan . --format ALL
       - cd ../..
@@ -62,7 +61,14 @@ phases:
           --subject "CodeBuild Status: $CODEBUILD_BUILD_ID" \
           --text "Build status: $CODEBUILD_BUILD_STATUS" \
           --region "us-east-1" || echo "SES email failed (non-blocking)"
+      - |
+        curl -X POST -H 'Content-type: application/json' --data "{
+          \"text\": \"✅ CodeBuild Completed: $CODEBUILD_BUILD_ID\n🔍 Status: $CODEBUILD_BUILD_STATUS\n📊 SonarQube: http://54.234.202.240:9000/dashboard?id=swiggy\"
+        }" "$SLACK_WEBHOOK_URL" || echo "Slack notification skipped"
 
 artifacts:
   files:
     - appspec.yaml
+    - trivyfilescan.txt
+    - trivyimage.txt
+    - dependency-check/bin/dependency-check-report.*
