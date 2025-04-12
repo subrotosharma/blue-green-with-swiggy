@@ -12,13 +12,10 @@ phases:
     runtime-versions:
       python: 3.11
       java: corretto17
-    commands:
-      - pip install --upgrade awscli
-      - yum install -y jq
 
   pre_build:
     commands:
-      - echo "Installing tools..."
+      - echo "Installing dependencies..."
       - wget https://github.com/aquasecurity/trivy/releases/download/v0.19.2/trivy_0.19.2_Linux-64bit.tar.gz
       - tar zxvf trivy_0.19.2_Linux-64bit.tar.gz
       - export PATH=$PATH:$PWD
@@ -43,54 +40,25 @@ phases:
   post_build:
     commands:
       - echo "Performing Trivy image scan..."
-      - trivy image "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest" >> trivyimage.txt
+      - trivy image "$DOCKER_REGISTRY_USERNAME/swiggy:latest" >> trivyimage.txt
       - echo "Running OWASP Dependency-Check..."
       - cd dependency-check/bin
       - ./dependency-check.sh --scan . --format ALL
       - cd ../..
+      - echo "Build completed successfully!"
       - echo "Running SonarQube analysis..."
       - |
         sonar-scanner \
           -Dsonar.projectKey=swiggy \
           -Dsonar.sources=. \
-          -Dsonar.host.url=http://54.234.202.240:9000 \
+          -Dsonar.host.url=http://34.234.70.90:9000 \
           -Dsonar.login=$SONAR_TOKEN
-      - |
-        echo "Deploying to ECS..."
-        IMAGE_URI="$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest"
-        TASK_DEF=$(aws ecs describe-task-definition --task-definition swiggy-task)
-        NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMAGE "$IMAGE_URI" '
-          .taskDefinition |
-          {
-            family,
-            containerDefinitions,
-            executionRoleArn,
-            taskRoleArn,
-            networkMode,
-            requiresCompatibilities,
-            cpu,
-            memory
-          } |
-          .containerDefinitions[0].image = $IMAGE
-        ')
-        echo "$NEW_TASK_DEF" > new-task-def.json
-        aws ecs register-task-definition --cli-input-json file://new-task-def.json > registered-task-def.json
-        NEW_REVISION=$(cat registered-task-def.json | jq -r '.taskDefinition.revision')
-        echo "New Task Revision: $NEW_REVISION"
-        aws ecs update-service \
-          --cluster bluegreen-cluster \
-          --service swiggy-service \
-          --task-definition swiggy-task:$NEW_REVISION
-        aws ecs wait services-stable \
-          --cluster bluegreen-cluster \
-          --services swiggy-service
-        echo "ECS Deployment complete."
       - |
         aws ses send-email \
           --from "devopssubroto@gmail.com" \
           --to "devopssubroto@gmail.com" \
-          --subject "✅ ECS Deployed: $CODEBUILD_BUILD_ID" \
-          --text "Build + ECS deployment successful.\nDashboard: http://54.234.202.240:9000/dashboard?id=swiggy" \
+          --subject "CodeBuild Status: $CODEBUILD_BUILD_ID" \
+          --text "Build status: $CODEBUILD_BUILD_STATUS" \
           --region "us-east-1" || echo "SES email failed (non-blocking)"
 
 artifacts:
