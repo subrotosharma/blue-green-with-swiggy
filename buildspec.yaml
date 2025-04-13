@@ -51,7 +51,7 @@ phases:
         sonar-scanner \
           -Dsonar.projectKey=swiggy \
           -Dsonar.sources=. \
-          -Dsonar.host.url=http://34.234.70.90:9000 \
+          -Dsonar.host.url=http://50.19.140.18:9000 \
           -Dsonar.login=$SONAR_TOKEN
       - |
         aws ses send-email \
